@@ -9,7 +9,7 @@
 | Task | Module | Status |
 |------|--------|--------|
 | 1 | Project Scaffold | DONE (commit b7e0f30) |
-| 2 | github-client.js | PENDING |
+| 2 | github-client.js | DONE (commit 5c6fe1c, 9 tests) |
 | 3 | root-parser.js | PENDING |
 | 4 | slugify.js | PENDING |
 | 5 | state-manager.js | PENDING |
@@ -25,7 +25,7 @@
 Start a new session and say:
 
 ```
-Resume building the shared-memory plugin. Read docs/plans/PROGRESS.md for current state, then continue with Task 2 (github-client.js) using subagent-driven development from the implementation plan.
+Resume building the shared-memory plugin. Read docs/plans/PROGRESS.md for current state, then continue with Task 3 (root-parser.js) using subagent-driven development from the implementation plan.
 ```
 
 ## Key Context
