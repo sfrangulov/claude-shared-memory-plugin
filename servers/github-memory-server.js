@@ -32,6 +32,7 @@ const repoString = process.env.GITHUB_REPO;
 
 const octokit = createOctokit(token);
 const client = createGitHubClient({ octokit, repo: repoString });
+const [repoOwner, repoName] = (repoString || "").split("/");
 const stateManager = createStateManager(process.cwd());
 
 // Session state
@@ -334,29 +335,66 @@ server.registerTool(
       const userInfo = await client.getUserInfo();
       sessionAuthor = userInfo.name;
 
-      // 2. Get root directory listing
-      const rootItems = await client.getRootDirectoryListing();
-      const rootNames = rootItems.map((item) => item.name);
+      // 2. Get root directory listing (may fail on empty repo)
+      let rootItems;
+      let isEmptyRepo = false;
+      try {
+        rootItems = await client.getRootDirectoryListing();
+      } catch (err) {
+        if (
+          err.message?.toLowerCase().includes("empty") ||
+          err.status === 409
+        ) {
+          isEmptyRepo = true;
+          rootItems = [];
+        } else {
+          throw err;
+        }
+      }
 
+      const rootNames = rootItems.map((item) => item.name);
       const hasMeta = rootNames.includes("_meta.md");
       const hasShared = rootNames.includes("_shared");
 
       // 3-4. Cold start or partial init
       if (!hasMeta || !hasShared) {
-        const files = [];
-        if (!hasMeta) {
-          files.push({ path: "_meta.md", content: DEFAULT_META });
-        }
-        if (!hasShared) {
-          files.push({
-            path: "_shared/root.md",
-            content: DEFAULT_SHARED_ROOT,
+        if (isEmptyRepo) {
+          // Empty repo — use Contents API (works without existing commits)
+          if (!hasMeta) {
+            await octokit.rest.repos.createOrUpdateFileContents({
+              owner: repoOwner,
+              repo: repoName,
+              path: "_meta.md",
+              message: "[shared-memory] init: create _meta.md",
+              content: Buffer.from(DEFAULT_META).toString("base64"),
+            });
+          }
+          if (!hasShared) {
+            await octokit.rest.repos.createOrUpdateFileContents({
+              owner: repoOwner,
+              repo: repoName,
+              path: "_shared/root.md",
+              message: "[shared-memory] init: create _shared/root.md",
+              content: Buffer.from(DEFAULT_SHARED_ROOT).toString("base64"),
+            });
+          }
+        } else {
+          // Repo has commits but missing structure — use atomicCommit
+          const files = [];
+          if (!hasMeta) {
+            files.push({ path: "_meta.md", content: DEFAULT_META });
+          }
+          if (!hasShared) {
+            files.push({
+              path: "_shared/root.md",
+              content: DEFAULT_SHARED_ROOT,
+            });
+          }
+          await atomicCommitWithRetry(client, {
+            files,
+            message: "[shared-memory] init: initialize repository structure",
           });
         }
-        await atomicCommitWithRetry(client, {
-          files,
-          message: "[shared-memory] init: initialize repository structure",
-        });
 
         return successResult({
           status: "initialized",

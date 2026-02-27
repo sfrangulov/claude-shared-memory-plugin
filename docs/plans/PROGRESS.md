@@ -25,18 +25,14 @@
 - 80 unit tests across 5 test files, all passing
 - github-client: 9, root-parser: 32, slugify: 21, state-manager: 10, atomic-commit: 8
 
-## Next: Fix empty repo cold start in connect_repo
+## Completed: Fix empty repo cold start in connect_repo
 
-**Problem:** `connect_repo` fails on a completely empty GitHub repo (no commits). `getRootDirectoryListing()` throws "This repository is empty" and `atomicCommitWithRetry` fails because there's no HEAD SHA.
+**Fixed.** `connect_repo` now handles completely empty GitHub repos:
 
-**Fix needed in `servers/github-memory-server.js` lines 337-359:**
-
-1. Wrap `getRootDirectoryListing()` (line 338) in try/catch — if error message contains "empty", treat as empty repo
-2. For empty repo cold start: use Octokit Contents API (`octokit.rest.repos.createOrUpdateFileContents`) instead of `atomicCommitWithRetry` — Contents API works without existing commits
-3. Create `_meta.md` first (creates initial commit + main branch), then `_shared/root.md`
-4. See working pattern in `servers/test/integration.test.js` lines 50-65
-
-**Also add `octokit` to the module scope** so connect_repo handler can access it (currently only `client` is in scope, but Contents API needs raw octokit).
+1. `getRootDirectoryListing()` wrapped in try/catch — "empty" or status 409 → `isEmptyRepo = true`
+2. Empty repo: uses Octokit Contents API (`createOrUpdateFileContents`) — works without existing commits
+3. Non-empty repo missing structure: still uses `atomicCommitWithRetry` (original path)
+4. Added `repoOwner`/`repoName` at module scope (parsed from `GITHUB_REPO`)
 
 ## How to Resume
 
