@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "shared-memory": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/servers/github-memory-server.js"],
+      "env": {
+        "GITHUB_TOKEN": "{{GITHUB_TOKEN}}",
+        "GITHUB_REPO": "{{GITHUB_REPO}}"
+      }
+    }
+  }
+}

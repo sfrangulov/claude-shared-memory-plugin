@@ -1,0 +1,10 @@
+{
+  "name": "shared-memory",
+  "version": "1.0.0",
+  "description": "Shared team knowledge base backed by a GitHub repository. Team members save decisions, architecture, processes, and contacts — Claude remembers everything across sessions and people.",
+  "author": {
+    "name": "Sergei Frangulov"
+  },
+  "license": "MIT",
+  "keywords": ["memory", "team", "knowledge-base", "github", "collaboration"]
+}

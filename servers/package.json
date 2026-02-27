@@ -1,0 +1,26 @@
+{
+  "name": "shared-memory-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node github-memory-server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "zod": "^3.24.0",
+    "@octokit/rest": "^22.0.0",
+    "@octokit/plugin-retry": "^8.0.0",
+    "@octokit/plugin-throttling": "^11.0.0",
+    "p-limit": "^7.0.0",
+    "transliteration": "^2.6.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  }
+}
