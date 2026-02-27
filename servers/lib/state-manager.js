@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename, unlink } from "node:fs/promises";
+import { readFile, writeFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 
 const STATE_FILENAME = ".shared-memory-state";
