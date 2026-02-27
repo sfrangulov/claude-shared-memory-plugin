@@ -1,11 +1,18 @@
 {
-  "name": "shared-memory-server",
+  "name": "@sfrangulov/shared-memory-mcp",
   "version": "1.0.0",
-  "private": true,
+  "description": "MCP server for Claude Shared Memory — turns a GitHub repo into a shared team knowledge base",
   "type": "module",
+  "bin": {
+    "shared-memory-mcp": "github-memory-server.js"
+  },
   "engines": {
     "node": ">=20.0.0"
   },
+  "files": [
+    "github-memory-server.js",
+    "lib/"
+  ],
   "scripts": {
     "start": "node github-memory-server.js",
     "test": "vitest run",

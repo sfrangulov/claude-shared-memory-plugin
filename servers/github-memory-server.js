@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Claude Shared Memory — MCP Server
  *

@@ -5,6 +5,8 @@
   "author": {
     "name": "Sergei Frangulov"
   },
+  "repository": "https://github.com/sfrangulov/claude-shared-memory-plugin",
+  "homepage": "https://github.com/sfrangulov/claude-shared-memory-plugin",
   "license": "MIT",
   "keywords": ["memory", "team", "knowledge-base", "github", "collaboration"]
 }
