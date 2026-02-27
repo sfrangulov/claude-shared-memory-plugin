@@ -18,7 +18,7 @@
 | 8 | SKILL.md | DONE (commit 8ce0ea0) |
 | 9 | Reference files | DONE (commit 8ce0ea0) |
 | 10 | Slash commands | DONE (commit 8ce0ea0) |
-| 11 | Integration testing | PENDING |
+| 11 | Integration testing | DONE (commit 4736c6f, 7 tests) |
 
 ## Test Summary
 
