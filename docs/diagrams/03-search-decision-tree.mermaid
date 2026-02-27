@@ -1,0 +1,34 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2C5F8A', 'lineColor': '#5B6770', 'secondaryColor': '#F5A623', 'tertiaryColor': '#E8F4FD'}}}%%
+
+flowchart TD
+    A["🔍 User asks about<br/>shared knowledge"] --> B{"Skill determines<br/>search type"}
+
+    B -->|"Person name<br/>detected"| C["search_author"]
+    C --> C1{"Author in cache?"}
+    C1 -->|"Yes"| C2["Return cached entries"]
+    C1 -->|"No"| C3["Scan all root.md files<br/>for Author field"]
+    C3 --> C4["Cache results<br/>(session-only, no TTL)"]
+    C4 --> C2
+
+    B -->|"Tag-based<br/>query"| D["search_tags"]
+    D --> D1["Match keywords against<br/>Tags (exact) + Description (substring)"]
+    D1 --> D2{"Result count?"}
+    D2 -->|"1"| D3["Load entry automatically"]
+    D2 -->|"2-5"| D4["Load all entries"]
+    D2 -->|"6-15"| D5["Show list with descriptions<br/>User selects (max 5 to load)"]
+    D2 -->|">15"| D6["Truncate at 15<br/>+ was_truncated: true<br/>'Try more specific tags'"]
+    D2 -->|"0"| D7["'Nothing found in TOC'<br/>→ Offer search_deep"]
+
+    B -->|"Broad/vague<br/>query"| E["search_deep"]
+    E --> E1["GitHub Search API<br/>(10 req/min limit)"]
+    E1 --> E2["Full-text search<br/>across entry content"]
+    E2 --> E3["Return matching entries<br/>ranked by relevance"]
+
+    D3 --> F["✅ Claude answers<br/>with shared context"]
+    D4 --> F
+    D5 --> F
+    E3 --> F
+    C2 --> F
+
+    style A fill:#4A90D9,color:#fff
+    style F fill:#27AE60,color:#fff

@@ -1,0 +1,24 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2C5F8A', 'lineColor': '#5B6770', 'secondaryColor': '#F5A623', 'tertiaryColor': '#E8F4FD'}}}%%
+
+flowchart TD
+    A["👤 Administrator<br/>Decides to set up shared memory"] --> B["Create GitHub repo<br/>(private, empty)"]
+    B --> C["Generate Personal Access Token<br/>(repo scope)"]
+    C --> D["Install Shared Memory plugin<br/>in Cowork"]
+    D --> E["Enter token + repo URL<br/>in plugin settings"]
+    E --> F{"First launch:<br/>connect_repo"}
+    F -->|"Empty repo"| G["Plugin offers initialization:<br/>'Set up shared memory?'"]
+    G -->|"Yes"| H["Atomic commit:<br/>_meta.md + _shared/root.md"]
+    H --> I["✅ Cold start complete"]
+    F -->|"Partial init<br/>(missing files)"| J["Plugin completes<br/>missing files (idempotent)"]
+    J --> I
+    F -->|"Already initialized"| I
+    I --> K["Create first project:<br/>/project mobile-app"]
+    K --> L["Plugin creates folder +<br/>root.md from template"]
+    L --> M["Write first entry:<br/>'Remember for the team...'"]
+    M --> N["✅ Memory is live"]
+    N --> O["Invite team members<br/>(grant repo access)"]
+    O --> P["Share plugin install<br/>instructions with team"]
+
+    style A fill:#4A90D9,color:#fff
+    style N fill:#27AE60,color:#fff
+    style I fill:#27AE60,color:#fff

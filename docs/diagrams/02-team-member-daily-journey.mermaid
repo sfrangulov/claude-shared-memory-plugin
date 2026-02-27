@@ -1,0 +1,40 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2C5F8A', 'lineColor': '#5B6770', 'secondaryColor': '#F5A623', 'tertiaryColor': '#E8F4FD'}}}%%
+
+flowchart TD
+    A["👤 New Team Member<br/>Installs plugin"] --> B["Enter token + repo<br/>in settings"]
+    B --> C{"connect_repo"}
+    C --> D["Repo already initialized<br/>_shared/root.md loaded"]
+    D --> E{"Active project<br/>in state file?"}
+    E -->|"No"| F["Plugin: 'Which project?'<br/>(combined prompt with list)"]
+    F --> G["switch_project<br/>→ root.md loaded"]
+    E -->|"Yes"| G
+
+    G --> H{"Daily workflow:<br/>What does the user need?"}
+
+    H -->|"Search"| I["'What do we use for auth?'"]
+    I --> J["Skill extracts keywords<br/>→ matches root.md tags"]
+    J --> K{"Matches found?"}
+    K -->|"1-5 entries"| L["Load entries automatically"]
+    K -->|">5 entries"| M["Show list, user selects"]
+    K -->|"0 matches"| N["Offer deep search<br/>(search_deep / search_tags)"]
+    L --> O["Claude answers<br/>with shared context"]
+    M --> O
+    N --> O
+
+    H -->|"Save"| P["'Remember this decision<br/>for the team'"]
+    P --> Q{"Local or shared?"}
+    Q -->|"Shared"| R["check_duplicate"]
+    R -->|"No duplicate"| S["write_entry<br/>(atomic commit)"]
+    R -->|"Similar exists"| T["'Update existing<br/>or create new?'"]
+    T -->|"Update"| U["update_entry"]
+    T -->|"New"| S
+    S --> V["✅ Entry saved"]
+
+    H -->|"Update"| W["'Update the auth entry<br/>with new info'"]
+    W --> X["read_entry → show current"]
+    X --> Y["update_entry<br/>(with previous_sha)"]
+    Y --> V
+
+    style A fill:#4A90D9,color:#fff
+    style V fill:#27AE60,color:#fff
+    style O fill:#27AE60,color:#fff
