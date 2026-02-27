@@ -10,22 +10,27 @@
 |------|--------|--------|
 | 1 | Project Scaffold | DONE (commit b7e0f30) |
 | 2 | github-client.js | DONE (commit 5c6fe1c, 9 tests) |
-| 3 | root-parser.js | PENDING |
-| 4 | slugify.js | PENDING |
-| 5 | state-manager.js | PENDING |
-| 6 | atomic-commit.js | PENDING |
-| 7 | MCP Server (12 tools) | PENDING |
-| 8 | SKILL.md | PENDING |
-| 9 | Reference files | PENDING |
-| 10 | Slash commands | PENDING |
+| 3 | root-parser.js | DONE (commit ed01394, 32 tests) |
+| 4 | slugify.js | DONE (commit 782811c, 21 tests) |
+| 5 | state-manager.js | DONE (commit a72f5af, 10 tests) |
+| 6 | atomic-commit.js | DONE (commit 5cb04a6, 8 tests) |
+| 7 | MCP Server (12 tools) | DONE (commit ee8a1c4, 722 lines) |
+| 8 | SKILL.md | DONE (commit 8ce0ea0) |
+| 9 | Reference files | DONE (commit 8ce0ea0) |
+| 10 | Slash commands | DONE (commit 8ce0ea0) |
 | 11 | Integration testing | PENDING |
+
+## Test Summary
+
+- 80 unit tests across 5 test files, all passing
+- github-client: 9, root-parser: 32, slugify: 21, state-manager: 10, atomic-commit: 8
 
 ## How to Resume
 
 Start a new session and say:
 
 ```
-Resume building the shared-memory plugin. Read docs/plans/PROGRESS.md for current state, then continue with Task 3 (root-parser.js) using subagent-driven development from the implementation plan.
+Resume building the shared-memory plugin. Read docs/plans/PROGRESS.md for current state, then continue with Task 11 (integration testing) from the implementation plan.
 ```
 
 ## Key Context
