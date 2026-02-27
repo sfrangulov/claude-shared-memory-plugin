@@ -16,7 +16,6 @@ import {
   parseRootMd,
   addEntryToRoot,
   updateEntryInRoot,
-  escapeTableCell,
 } from "./lib/root-parser.js";
 import { slugify, ensureUnique } from "./lib/slugify.js";
 import { atomicCommitWithRetry } from "./lib/atomic-commit.js";
