@@ -1,6 +1,6 @@
 {
   "name": "@sfrangulov/shared-memory-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for Claude Shared Memory — turns a GitHub repo into a shared team knowledge base",
   "type": "module",
   "bin": {
