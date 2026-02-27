@@ -228,9 +228,9 @@ export function addEntryToRoot(markdown, entry) {
   }
 
   // Build the new row in the correct column order
-  const entryValue = `[${entry.name}](${entry.file})`;
+  const entryValue = `[${escapeTableCell(entry.name)}](${entry.file})`;
   const descValue = escapeTableCell(entry.description);
-  const tagsValue = entry.tags.join(", ");
+  const tagsValue = escapeTableCell(entry.tags.join(", "));
 
   // Determine the number of columns from the header
   const headerCells = splitTableRow(lines[headerIndex]);
