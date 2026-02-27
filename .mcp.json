@@ -5,8 +5,8 @@
       "command": "npx",
       "args": ["-y", "@sfrangulov/shared-memory-mcp"],
       "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}",
-        "GITHUB_REPO": "${GITHUB_REPO}"
+        "GITHUB_TOKEN": "{{GITHUB_TOKEN}}",
+        "GITHUB_REPO": "{{GITHUB_REPO}}"
       }
     }
   }
