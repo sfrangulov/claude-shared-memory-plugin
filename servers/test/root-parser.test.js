@@ -198,6 +198,40 @@ describe("parseRootMd", () => {
     expect(result.entries).toEqual([]);
   });
 
+  it("handles description with special characters (quotes, parentheses)", () => {
+    const md = [
+      "# P",
+      "",
+      "| Entry | Description | Tags |",
+      "|---|---|---|",
+      '| [entry](entry.md) | Uses React.memo() and "hooks" for (re)rendering | react |',
+    ].join("\n");
+
+    const result = parseRootMd(md);
+    expect(result.entries[0].description).toBe(
+      'Uses React.memo() and "hooks" for (re)rendering'
+    );
+  });
+
+  it("handles table with missing Tags column", () => {
+    const md = [
+      "# P",
+      "",
+      "| Entry | Description |",
+      "|---|---|",
+      "| [entry](entry.md) | Some desc |",
+    ].join("\n");
+
+    const result = parseRootMd(md);
+    expect(result.corrupted).toBeUndefined();
+    expect(result.entries[0]).toEqual({
+      name: "entry",
+      file: "entry.md",
+      description: "Some desc",
+      tags: [],
+    });
+  });
+
   it("parses entry with plain text (no markdown link) in Entry column", () => {
     const md = [
       "# P",

@@ -248,7 +248,6 @@ export function addEntryToRoot(markdown, entry) {
   for (let i = headerIndex + 2; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line.includes("|")) break;
-    if (line === "") break;
     lastTableRowIndex = i;
   }
 
@@ -310,7 +309,7 @@ export function updateEntryInRoot(markdown, filename, changes) {
       newCells[columnMap.description] = escapeTableCell(changes.description);
     }
     if (changes.tags !== undefined && columnMap.tags !== undefined) {
-      newCells[columnMap.tags] = changes.tags.join(", ");
+      newCells[columnMap.tags] = escapeTableCell(changes.tags.join(", "));
     }
 
     const updatedRow = "| " + newCells.join(" | ") + " |";
