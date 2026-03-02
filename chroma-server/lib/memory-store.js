@@ -6,6 +6,16 @@
  */
 
 /**
+ * Extracts raw content from a formatted document (strips header metadata).
+ */
+function extractContentFromDocument(doc) {
+  // Document format: "# Title\n\n- **Author:**...\n- **Tags:**...\n- **Type:**...\n\ncontent"
+  const parts = doc.split("\n\n");
+  // Skip title (index 0) and metadata block (index 1), rest is content
+  return parts.slice(2).join("\n\n");
+}
+
+/**
  * Builds a formatted document string from entry fields.
  */
 function buildDocument({ title, author, tags, type, content }) {
@@ -81,18 +91,20 @@ export async function createMemoryStore({ client, embeddingFunction, collectionN
     async updateEntry(project, slug, changes) {
       const id = `${project}:${slug}`;
 
-      // Read existing metadata
-      const existing = await collection.get({ ids: [id], include: ["metadatas"] });
+      // Read existing entry (metadata + document for content fallback)
+      const existing = await collection.get({ ids: [id], include: ["metadatas", "documents"] });
       if (existing.ids.length === 0) {
         throw new Error(`Entry "${id}" not found`);
       }
 
       const oldMeta = existing.metadatas[0];
-      const title = changes.title || oldMeta.title;
-      const tags = changes.tags || oldMeta.tags.split(",");
-      const type = changes.type || oldMeta.type;
+      const oldDoc = existing.documents[0];
+      const title = changes.title ?? oldMeta.title;
+      const tags = changes.tags ?? oldMeta.tags.split(",");
+      const type = changes.type ?? oldMeta.type;
       const author = oldMeta.author;
-      const content = changes.content;
+      // Extract content from old document if not provided in changes
+      const content = changes.content ?? extractContentFromDocument(oldDoc);
 
       const now = new Date().toISOString();
       const document = buildDocument({ title, author, tags, type, content });
@@ -114,6 +126,10 @@ export async function createMemoryStore({ client, embeddingFunction, collectionN
 
     async deleteEntry(project, slug) {
       const id = `${project}:${slug}`;
+      const existing = await collection.get({ ids: [id] });
+      if (existing.ids.length === 0) {
+        throw new Error(`Entry "${id}" not found`);
+      }
       await collection.delete({ ids: [id] });
       return { id, deleted: true };
     },

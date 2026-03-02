@@ -164,6 +164,7 @@ describe("createMemoryStore", () => {
       const collection = mockClient._collection;
       collection.get.mockResolvedValue({
         ids: ["backend:pg-opt"],
+        documents: ["# Old\n\n- **Author:** a@b.com\n- **Tags:** pg\n- **Type:** note\n\nOld content"],
         metadatas: [{ project: "backend", title: "Old", author: "a@b.com", tags: "pg", type: "note", created_at: "2026-03-01", updated_at: "2026-03-01" }],
       });
 
@@ -183,16 +184,55 @@ describe("createMemoryStore", () => {
         })],
       });
     });
+
+    it("preserves existing content when content not provided", async () => {
+      const collection = mockClient._collection;
+      collection.get.mockResolvedValue({
+        ids: ["backend:pg-opt"],
+        documents: ["# Old Title\n\n- **Author:** a@b.com\n- **Tags:** pg\n- **Type:** note\n\nExisting content here"],
+        metadatas: [{ project: "backend", title: "Old Title", author: "a@b.com", tags: "pg", type: "note", created_at: "2026-03-01", updated_at: "2026-03-01" }],
+      });
+
+      await store.updateEntry("backend", "pg-opt", {
+        title: "New Title Only",
+      });
+
+      expect(collection.update).toHaveBeenCalledWith({
+        ids: ["backend:pg-opt"],
+        documents: [expect.stringContaining("Existing content here")],
+        metadatas: [expect.objectContaining({ title: "New Title Only" })],
+      });
+    });
+
+    it("throws on non-existent entry", async () => {
+      const collection = mockClient._collection;
+      collection.get.mockResolvedValue({ ids: [], documents: [], metadatas: [] });
+
+      await expect(
+        store.updateEntry("backend", "nonexistent", { content: "x" })
+      ).rejects.toThrow("not found");
+    });
   });
 
   describe("deleteEntry", () => {
     it("deletes by id", async () => {
       const collection = mockClient._collection;
+      collection.get.mockResolvedValue({ ids: ["backend:pg-opt"] });
+
       await store.deleteEntry("backend", "pg-opt");
 
       expect(collection.delete).toHaveBeenCalledWith({
         ids: ["backend:pg-opt"],
       });
+    });
+
+    it("throws on non-existent entry", async () => {
+      const collection = mockClient._collection;
+      collection.get.mockResolvedValue({ ids: [] });
+
+      await expect(
+        store.deleteEntry("backend", "nonexistent")
+      ).rejects.toThrow("not found");
     });
   });
 
