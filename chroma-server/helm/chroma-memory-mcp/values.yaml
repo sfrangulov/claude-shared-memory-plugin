@@ -65,6 +65,7 @@ chromadb:
 secrets:
   googleApiKey: ""
   googleClientId: ""
+  googleClientSecret: ""
 
 ingress:
   enabled: true

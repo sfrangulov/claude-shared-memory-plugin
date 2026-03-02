@@ -45,6 +45,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "chroma-memory-mcp.fullname" . }}-secrets
                   key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "chroma-memory-mcp.fullname" . }}-secrets
+                  key: GOOGLE_CLIENT_SECRET
           resources:
             {{- toYaml .Values.mcp.resources | nindent 12 }}
           livenessProbe:

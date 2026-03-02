@@ -13,17 +13,15 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import {
-  mcpAuthMetadataRouter,
-  getOAuthProtectedResourceMetadataUrl,
-} from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { z } from "zod";
 import { ChromaClient } from "chromadb";
 import { GoogleGeminiEmbeddingFunction } from "@chroma-core/google-gemini";
 import { createMemoryStore } from "./lib/memory-store.js";
-import { createTokenVerifier, extractUserEmail } from "./lib/auth.js";
+import { extractUserEmail } from "./lib/auth.js";
+import { createOAuthProvider } from "./lib/oauth-provider.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -253,6 +251,7 @@ async function main() {
     chromaUrl: process.env.CHROMA_URL || "http://localhost:8000",
     chromaCollection: process.env.CHROMA_COLLECTION || "memories",
     googleClientId: process.env.GOOGLE_CLIENT_ID,
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
     googleApiKey: process.env.GOOGLE_API_KEY,
     baseUrl: process.env.MCP_BASE_URL, // e.g. https://memory.example.com — required for auth
   };
@@ -299,38 +298,39 @@ async function main() {
   // Express app
   const app = createMcpExpressApp({ host: CONFIG.host });
 
-  // Auth setup — optional, requires MCP_BASE_URL (HTTPS) and GOOGLE_CLIENT_ID
-  const authEnabled = CONFIG.baseUrl && CONFIG.googleClientId;
+  // Auth setup — optional, requires MCP_BASE_URL, GOOGLE_CLIENT_ID, and GOOGLE_CLIENT_SECRET
+  const authEnabled = CONFIG.baseUrl && CONFIG.googleClientId && CONFIG.googleClientSecret;
   let authMiddleware = (_req, _res, next) => next(); // no-op for dev mode
 
   if (authEnabled) {
-    const verifier = createTokenVerifier({
+    const provider = createOAuthProvider({
       googleClientId: CONFIG.googleClientId,
+      googleClientSecret: CONFIG.googleClientSecret,
+      baseUrl: CONFIG.baseUrl,
     });
 
-    const mcpServerUrl = new URL(`${CONFIG.baseUrl}/mcp`);
-
     app.use(
-      mcpAuthMetadataRouter({
-        oauthMetadata: {
-          issuer: CONFIG.baseUrl,
-          authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-          token_endpoint: "https://oauth2.googleapis.com/token",
-          response_types_supported: ["code"],
-          grant_types_supported: ["authorization_code"],
-        },
-        resourceServerUrl: mcpServerUrl,
-        resourceName: "Chroma Memory MCP",
+      mcpAuthRouter({
+        provider,
+        issuerUrl: new URL(CONFIG.baseUrl),
+        baseUrl: new URL(CONFIG.baseUrl),
+        serviceDocumentationUrl: new URL(
+          "https://github.com/anthropics/claude-shared-memory-plugin",
+        ),
       }),
     );
 
+    // Google OAuth callback (proxied — not part of MCP spec)
+    app.get("/oauth/google/callback", provider.handleGoogleCallback.bind(provider));
+
     authMiddleware = requireBearerAuth({
-      verifier,
+      verifier: provider,
       requiredScopes: [],
-      resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
     });
   } else {
-    console.log("Auth disabled — set MCP_BASE_URL and GOOGLE_CLIENT_ID to enable");
+    console.log(
+      "Auth disabled — set MCP_BASE_URL, GOOGLE_CLIENT_ID, and GOOGLE_CLIENT_SECRET to enable",
+    );
   }
 
   // Transport sessions
