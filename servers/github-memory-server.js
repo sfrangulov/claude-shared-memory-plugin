@@ -13,15 +13,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { createOctokit, createGitHubClient } from "./lib/github-client.js";
-import {
-  parseRootMd,
-  addEntryToRoot,
-  updateEntryInRoot,
-} from "./lib/root-parser.js";
 import { slugify, ensureUnique } from "./lib/slugify.js";
 import { atomicCommitWithRetry } from "./lib/atomic-commit.js";
 import { createStateManager } from "./lib/state-manager.js";
 import { validateProjectName, validateFileName } from "./lib/validators.js";
+import { createMemoryStore } from "./lib/memory-store.js";
 
 // ---------------------------------------------------------------------------
 // Server initialization
@@ -35,6 +31,7 @@ const repoString = process.env.GITHUB_REPO;
 const octokit = createOctokit(token);
 let client = createGitHubClient({ octokit, repo: repoString });
 const [repoOwner, repoName] = (repoString || "").split("/");
+let store = createMemoryStore(client);
 const stateManager = createStateManager(process.cwd());
 
 // Session state
@@ -349,6 +346,7 @@ server.registerTool(
             repo: repoString,
             branch: repoData.default_branch,
           });
+          store = createMemoryStore(client);
         }
       } catch {
         // Fallback: keep using 'main' (e.g., empty repo returns 409)
@@ -358,7 +356,7 @@ server.registerTool(
       let rootItems;
       let isEmptyRepo = false;
       try {
-        rootItems = await client.getRootDirectoryListing();
+        rootItems = await store.getRootListing();
       } catch (err) {
         if (
           err.message?.toLowerCase().includes("empty") ||
@@ -424,12 +422,8 @@ server.registerTool(
       }
 
       // 5. Read _shared/root.md, count entries
-      const sharedRoot = await client.getFileContent("_shared/root.md");
-      let sharedEntriesCount = 0;
-      if (sharedRoot) {
-        const parsed = parseRootMd(sharedRoot.content);
-        sharedEntriesCount = parsed.entries.length;
-      }
+      const sharedIndex = await store.readIndex("_shared");
+      const sharedEntriesCount = sharedIndex ? sharedIndex.entries.length : 0;
 
       // 6. List projects (dirs excluding _shared, _meta.md)
       const projects = rootItems
@@ -470,8 +464,8 @@ server.registerTool(
   async ({ project }) => {
     return withErrorHandling(async () => {
       validateProjectName(project);
-      const file = await client.getFileContent(`${project}/root.md`);
-      if (!file) {
+      const index = await store.readIndex(project);
+      if (!index) {
         return errorResponse(
           "not_found",
           `root.md not found in project "${project}"`,
@@ -479,11 +473,9 @@ server.registerTool(
         );
       }
 
-      const parsed = parseRootMd(file.content);
-
       // If corrupted, fallback: list directory files
-      if (parsed.corrupted) {
-        const dirFiles = await client.getDirectoryListing(project);
+      if (index.corrupted) {
+        const dirFiles = await store.listFiles(project);
         const entries = dirFiles
           .filter((f) => f !== "root.md")
           .map((f) => ({ file: f }));
@@ -492,15 +484,15 @@ server.registerTool(
           description: "",
           entries,
           corrupted: true,
-          raw_markdown: file.content,
+          raw_markdown: index.raw,
         });
       }
 
       return successResult({
         project,
-        description: parsed.description,
-        entries: parsed.entries,
-        raw_markdown: file.content,
+        description: index.description,
+        entries: index.entries,
+        raw_markdown: index.raw,
       });
     });
   }
@@ -525,7 +517,7 @@ server.registerTool(
     return withErrorHandling(async () => {
       validateProjectName(project);
       validateFileName(file);
-      const result = await client.getFileContent(`${project}/${file}`);
+      const result = await store.readEntry(project, file);
       if (!result) {
         return errorResponse(
           "not_found",
@@ -590,8 +582,8 @@ server.registerTool(
     return withErrorHandling(async () => {
       validateProjectName(project);
       // 1. Read root.md
-      const rootFile = await client.getFileContent(`${project}/root.md`);
-      if (!rootFile) {
+      const index = await store.readIndex(project);
+      if (!index) {
         return errorResponse(
           "not_found",
           `root.md not found in project "${project}"`,
@@ -600,7 +592,7 @@ server.registerTool(
       }
 
       // 2. Generate slug, ensure unique
-      const existingFiles = await client.getDirectoryListing(project);
+      const existingFiles = await store.listFiles(project);
       const baseSlug = slugify(title);
       const uniqueSlug = ensureUnique(baseSlug, existingFiles);
       const fileName = `${uniqueSlug}.md`;
@@ -612,33 +604,10 @@ server.registerTool(
       if (related_override) {
         relatedLinks = related_override;
       } else if (auto_related) {
-        // Gather entries from project + _shared
-        const projectParsed = parseRootMd(rootFile.content);
-        let allEntries = projectParsed.entries.map((e) => ({
-          ...e,
-          file: `${e.file}`,
-          project,
-        }));
-
-        // Also read _shared entries
-        if (project !== "_shared") {
-          const sharedRoot = await client.getFileContent("_shared/root.md");
-          if (sharedRoot) {
-            const sharedParsed = parseRootMd(sharedRoot.content);
-            const sharedEntries = sharedParsed.entries.map((e) => ({
-              ...e,
-              file: `../_shared/${e.file}`,
-              project: "_shared",
-            }));
-            allEntries = allEntries.concat(sharedEntries);
-          }
-        }
-
-        const related = findRelated(allEntries, tags, fileName);
+        const related = await store.getRelatedEntries(project, tags, fileName, findRelated);
         if (related.length <= 3) {
           relatedLinks = related.map((r) => r.file);
         } else {
-          // Add top 3, return rest as candidates
           relatedLinks = related.slice(0, 3).map((r) => r.file);
           relatedCandidates = related.slice(3).map((r) => ({
             file: r.file,
@@ -659,28 +628,12 @@ server.registerTool(
         related: relatedLinks,
       });
 
-      // 5. Update root.md
-      const { updated_markdown } = addEntryToRoot(rootFile.content, {
+      // 5. Atomic commit via store
+      const commitResult = await store.writeEntry(project, fileName, entryContent, {
         file: fileName,
         name: title,
         description,
         tags,
-      });
-
-      // 6. Atomic commit
-      const commitResult = await atomicCommitWithRetry(client, {
-        buildFiles: async () => {
-          const freshRoot = await client.getFileContent(`${project}/root.md`);
-          const { updated_markdown: freshMarkdown } = addEntryToRoot(
-            freshRoot.content,
-            { file: fileName, name: title, description, tags }
-          );
-          return [
-            { path: `${project}/${fileName}`, content: entryContent },
-            { path: `${project}/root.md`, content: freshMarkdown },
-          ];
-        },
-        message: `[shared-memory] create-entry: ${title}`,
       });
 
       if (!commitResult.success) {
@@ -738,7 +691,7 @@ server.registerTool(
       validateProjectName(project);
       validateFileName(file);
       // 1. Re-read current file
-      const current = await client.getFileContent(`${project}/${file}`);
+      const current = await store.readEntry(project, file);
       if (!current) {
         return errorResponse(
           "not_found",
@@ -751,9 +704,7 @@ server.registerTool(
       if (current.sha !== previous_sha) {
         // Concurrent edit detected
         const currentMeta = parseEntryMetadata(current.content);
-        const lastCommit = await client.getLastCommitForFile(
-          `${project}/${file}`
-        );
+        const lastCommit = await store.getLastCommit(`${project}/${file}`);
         return successResult({
           status: "concurrent_edit",
           current_sha: current.sha,
@@ -772,32 +723,8 @@ server.registerTool(
       // Recalculate related if tags changed
       let relatedLinks = currentMeta.related;
       if (new_tags) {
-        // Re-discover related with new tags
-        const rootFile = await client.getFileContent(`${project}/root.md`);
-        if (rootFile) {
-          const projectParsed = parseRootMd(rootFile.content);
-          let allEntries = projectParsed.entries.map((e) => ({
-            ...e,
-            file: `${e.file}`,
-            project,
-          }));
-
-          if (project !== "_shared") {
-            const sharedRoot = await client.getFileContent("_shared/root.md");
-            if (sharedRoot) {
-              const sharedParsed = parseRootMd(sharedRoot.content);
-              const sharedEntries = sharedParsed.entries.map((e) => ({
-                ...e,
-                file: `../_shared/${e.file}`,
-                project: "_shared",
-              }));
-              allEntries = allEntries.concat(sharedEntries);
-            }
-          }
-
-          const related = findRelated(allEntries, new_tags, file);
-          relatedLinks = related.slice(0, 3).map((r) => r.file);
-        }
+        const related = await store.getRelatedEntries(project, new_tags, file, findRelated);
+        relatedLinks = related.slice(0, 3).map((r) => r.file);
       }
 
       const updatedContent = buildEntryContent({
@@ -809,33 +736,15 @@ server.registerTool(
         related: relatedLinks,
       });
 
-      // 4. Atomic commit (re-reads root.md on each retry to prevent data loss)
-      const commitResult = await atomicCommitWithRetry(client, {
-        buildFiles: async () => {
-          const currentFiles = [
-            { path: `${project}/${file}`, content: updatedContent },
-          ];
-          if (new_tags || new_description) {
-            const freshRoot = await client.getFileContent(`${project}/root.md`);
-            if (freshRoot) {
-              const changes = {};
-              if (new_tags) changes.tags = new_tags;
-              if (new_description) changes.description = new_description;
-              const updatedRoot = updateEntryInRoot(
-                freshRoot.content,
-                file,
-                changes
-              );
-              currentFiles.push({
-                path: `${project}/root.md`,
-                content: updatedRoot,
-              });
-            }
-          }
-          return currentFiles;
-        },
-        message: `[shared-memory] update-entry: ${currentMeta.title}`,
-      });
+      // 4. Atomic commit via store
+      const rootChanges = {};
+      if (new_tags) rootChanges.tags = new_tags;
+      if (new_description) rootChanges.description = new_description;
+      const commitResult = await store.updateEntry(
+        project, file, updatedContent,
+        (new_tags || new_description) ? rootChanges : null,
+        currentMeta.title,
+      );
 
       if (!commitResult.success) {
         return errorResponse(
@@ -878,29 +787,16 @@ server.registerTool(
   },
   async ({ keywords, active_project }) => {
     return withErrorHandling(async () => {
-      // 1. Get all projects
-      const rootItems = await client.getRootDirectoryListing();
-      const projectDirs = rootItems
-        .filter(
-          (item) =>
-            item.type === "dir" && !item.name.startsWith(".")
-        )
-        .map((item) => item.name);
-
-      // Ensure _shared is included
-      if (!projectDirs.includes("_shared")) {
-        projectDirs.push("_shared");
-      }
+      // 1. Get all projects (including _shared)
+      const projectDirs = await store.listAllDirs();
 
       // 2. Read all root.md files in parallel
       const rootContents = await Promise.all(
         projectDirs.map(async (proj) => {
-          const file = await client.getFileContent(`${proj}/root.md`);
-          if (!file) return { project: proj, entries: [] };
-          const parsed = parseRootMd(file.content);
+          const index = await store.readIndex(proj);
           return {
             project: proj,
-            entries: parsed.entries,
+            entries: index ? index.entries : [],
           };
         })
       );
@@ -1000,13 +896,7 @@ server.registerTool(
       if (project) {
         projectsToSearch = [project];
       } else {
-        const rootItems = await client.getRootDirectoryListing();
-        projectsToSearch = rootItems
-          .filter(
-            (item) =>
-              item.type === "dir" && !item.name.startsWith(".")
-          )
-          .map((item) => item.name);
+        projectsToSearch = await store.listAllDirs();
       }
 
       const results = [];
@@ -1019,18 +909,14 @@ server.registerTool(
         if (!authorIndex) {
           // Cache miss — read all entry metadata
           authorIndex = {};
-          const rootFile = await client.getFileContent(`${proj}/root.md`);
-          if (!rootFile) continue;
-
-          const parsed = parseRootMd(rootFile.content);
+          const index = await store.readIndex(proj);
+          if (!index) continue;
 
           // Read entry metadata in parallel
           const metaResults = await Promise.all(
-            parsed.entries.map(async (entry) => {
+            index.entries.map(async (entry) => {
               if (!entry.file) return null;
-              const fileContent = await client.getFileContent(
-                `${proj}/${entry.file}`
-              );
+              const fileContent = await store.readEntry(proj, entry.file);
               if (!fileContent) return null;
               const meta = parseEntryMetadata(fileContent.content);
               return {
@@ -1100,7 +986,7 @@ server.registerTool(
   },
   async ({ query }) => {
     return withErrorHandling(async () => {
-      const items = await client.searchCode(query);
+      const items = await store.searchDeep(query);
 
       // Filter out root.md and _meta.md
       const filtered = items.filter((item) => {
@@ -1148,26 +1034,14 @@ server.registerTool(
   },
   async () => {
     return withErrorHandling(async () => {
-      // 1. Get root directory listing
-      const rootItems = await client.getRootDirectoryListing();
-      const projectDirs = rootItems
-        .filter(
-          (item) =>
-            item.type === "dir" &&
-            item.name !== "_shared" &&
-            !item.name.startsWith(".")
-        )
-        .map((item) => item.name);
+      // 1. Get project list
+      const projectDirs = await store.listProjects();
 
       // 2. For each project, read root.md and count entries
       const projects = await Promise.all(
         projectDirs.map(async (name) => {
-          const rootFile = await client.getFileContent(`${name}/root.md`);
-          let entries_count = 0;
-          if (rootFile) {
-            const parsed = parseRootMd(rootFile.content);
-            entries_count = parsed.entries.length;
-          }
+          const index = await store.readIndex(name);
+          const entries_count = index ? index.entries.length : 0;
           return { name, entries_count };
         })
       );
@@ -1205,19 +1079,16 @@ server.registerTool(
       validateProjectName(projectSlug);
 
       // 2. Check if folder exists
-      const rootFile = await client.getFileContent(
-        `${projectSlug}/root.md`
-      );
+      const index = await store.readIndex(projectSlug);
 
-      if (rootFile) {
-        // 3. Exists — read root.md, compute summary, update state
-        const parsed = parseRootMd(rootFile.content);
-        const entries_count = parsed.entries.length;
+      if (index) {
+        // 3. Exists — compute summary, update state
+        const entries_count = index.entries.length;
 
         // Determine last entry date
         let last_entry_date = null;
         if (entries_count > 0) {
-          const lastEntry = parsed.entries[entries_count - 1];
+          const lastEntry = index.entries[entries_count - 1];
           // Try to find date in description
           const dateMatch = lastEntry.description.match(
             /(\d{4}-\d{2}-\d{2})/
@@ -1226,7 +1097,7 @@ server.registerTool(
             last_entry_date = dateMatch[1];
           } else if (lastEntry.file) {
             // Fall back to git commit date
-            const commitInfo = await client.getLastCommitForFile(
+            const commitInfo = await store.getLastCommit(
               `${projectSlug}/${lastEntry.file}`
             );
             if (commitInfo?.date) {
@@ -1261,8 +1132,8 @@ server.registerTool(
           last_entry_date,
           summary,
           root_content: {
-            description: parsed.description,
-            entries: parsed.entries,
+            description: index.description,
+            entries: index.entries,
           },
         });
       }
@@ -1319,9 +1190,9 @@ server.registerTool(
   async ({ project, title, tags, description }) => {
     return withErrorHandling(async () => {
       validateProjectName(project);
-      // 1. Read project root.md
-      const rootFile = await client.getFileContent(`${project}/root.md`);
-      if (!rootFile) {
+      // 1. Read project index
+      const index = await store.readIndex(project);
+      if (!index) {
         return errorResponse(
           "not_found",
           `root.md not found in project "${project}"`,
@@ -1329,14 +1200,13 @@ server.registerTool(
         );
       }
 
-      const parsed = parseRootMd(rootFile.content);
       const inputKeywords = extractKeywords(`${title} ${description}`);
       const lowerTags = tags.map((t) => t.toLowerCase());
 
       const candidates = [];
 
       // 2. For each entry: tag match + keyword overlap
-      for (const entry of parsed.entries) {
+      for (const entry of index.entries) {
         const entryLowerTags = entry.tags.map((t) => t.toLowerCase());
 
         // Tag matching: exact match
