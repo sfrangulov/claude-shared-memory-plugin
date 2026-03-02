@@ -588,6 +588,7 @@ server.registerTool(
     related_override,
   }) => {
     return withErrorHandling(async () => {
+      validateProjectName(project);
       // 1. Read root.md
       const rootFile = await client.getFileContent(`${project}/root.md`);
       if (!rootFile) {
@@ -734,6 +735,8 @@ server.registerTool(
   },
   async ({ project, file, previous_sha, new_content, new_tags, new_description }) => {
     return withErrorHandling(async () => {
+      validateProjectName(project);
+      validateFileName(file);
       // 1. Re-read current file
       const current = await client.getFileContent(`${project}/${file}`);
       if (!current) {
@@ -991,6 +994,7 @@ server.registerTool(
   },
   async ({ author_query, project }) => {
     return withErrorHandling(async () => {
+      if (project) validateProjectName(project);
       // Determine which projects to search
       let projectsToSearch;
       if (project) {
@@ -1198,6 +1202,7 @@ server.registerTool(
     return withErrorHandling(async () => {
       // 1. Slugify project name
       const projectSlug = slugify(project);
+      validateProjectName(projectSlug);
 
       // 2. Check if folder exists
       const rootFile = await client.getFileContent(
@@ -1313,6 +1318,7 @@ server.registerTool(
   },
   async ({ project, title, tags, description }) => {
     return withErrorHandling(async () => {
+      validateProjectName(project);
       // 1. Read project root.md
       const rootFile = await client.getFileContent(`${project}/root.md`);
       if (!rootFile) {
