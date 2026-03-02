@@ -40,7 +40,7 @@ export function createOctokit(token) {
  * @param {string} params.repo - "owner/repo" string
  * @returns {object} client with owner, repo, and API methods
  */
-export function createGitHubClient({ octokit, repo }) {
+export function createGitHubClient({ octokit, repo, branch = "main" }) {
   const parts = repo.split("/");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
     throw new Error(
@@ -112,7 +112,7 @@ export function createGitHubClient({ octokit, repo }) {
         const { data } = await octokit.rest.git.getRef({
           owner,
           repo: repoName,
-          ref: "heads/main",
+          ref: `heads/${branch}`,
         });
         return data.object.sha;
       });
@@ -177,7 +177,7 @@ export function createGitHubClient({ octokit, repo }) {
         await octokit.rest.git.updateRef({
           owner,
           repo: repoName,
-          ref: "heads/main",
+          ref: `heads/${branch}`,
           sha: commitSHA,
           force: false,
         });

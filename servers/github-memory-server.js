@@ -21,6 +21,7 @@ import {
 import { slugify, ensureUnique } from "./lib/slugify.js";
 import { atomicCommitWithRetry } from "./lib/atomic-commit.js";
 import { createStateManager } from "./lib/state-manager.js";
+import { validateProjectName, validateFileName } from "./lib/validators.js";
 
 // ---------------------------------------------------------------------------
 // Server initialization
@@ -32,7 +33,7 @@ const token = process.env.GITHUB_TOKEN;
 const repoString = process.env.GITHUB_REPO;
 
 const octokit = createOctokit(token);
-const client = createGitHubClient({ octokit, repo: repoString });
+let client = createGitHubClient({ octokit, repo: repoString });
 const [repoOwner, repoName] = (repoString || "").split("/");
 const stateManager = createStateManager(process.cwd());
 
@@ -336,6 +337,23 @@ server.registerTool(
       const userInfo = await client.getUserInfo();
       sessionAuthor = userInfo.name;
 
+      // 1.5 Detect default branch and re-create client if needed
+      try {
+        const { data: repoData } = await octokit.rest.repos.get({
+          owner: repoOwner,
+          repo: repoName,
+        });
+        if (repoData.default_branch !== "main") {
+          client = createGitHubClient({
+            octokit,
+            repo: repoString,
+            branch: repoData.default_branch,
+          });
+        }
+      } catch {
+        // Fallback: keep using 'main' (e.g., empty repo returns 409)
+      }
+
       // 2. Get root directory listing (may fail on empty repo)
       let rootItems;
       let isEmptyRepo = false;
@@ -451,6 +469,7 @@ server.registerTool(
   },
   async ({ project }) => {
     return withErrorHandling(async () => {
+      validateProjectName(project);
       const file = await client.getFileContent(`${project}/root.md`);
       if (!file) {
         return errorResponse(
@@ -504,6 +523,8 @@ server.registerTool(
   },
   async ({ project, file }) => {
     return withErrorHandling(async () => {
+      validateProjectName(project);
+      validateFileName(file);
       const result = await client.getFileContent(`${project}/${file}`);
       if (!result) {
         return errorResponse(

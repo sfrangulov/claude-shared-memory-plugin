@@ -151,3 +151,48 @@ describe("getHeadSHA", () => {
     });
   });
 });
+
+describe("custom branch", () => {
+  it("uses provided branch for getHeadSHA", async () => {
+    const octokit = makeMockOctokit();
+    const client = createGitHubClient({
+      octokit,
+      repo: "owner/repo",
+      branch: "master",
+    });
+    await client.getHeadSHA();
+    expect(octokit.rest.git.getRef).toHaveBeenCalledWith({
+      owner: "owner",
+      repo: "repo",
+      ref: "heads/master",
+    });
+  });
+
+  it("uses provided branch for updateRef", async () => {
+    const octokit = makeMockOctokit();
+    const client = createGitHubClient({
+      octokit,
+      repo: "owner/repo",
+      branch: "develop",
+    });
+    await client.updateRef("newsha");
+    expect(octokit.rest.git.updateRef).toHaveBeenCalledWith({
+      owner: "owner",
+      repo: "repo",
+      ref: "heads/develop",
+      sha: "newsha",
+      force: false,
+    });
+  });
+
+  it("defaults to main when branch not specified", async () => {
+    const octokit = makeMockOctokit();
+    const client = createGitHubClient({ octokit, repo: "owner/repo" });
+    await client.getHeadSHA();
+    expect(octokit.rest.git.getRef).toHaveBeenCalledWith({
+      owner: "owner",
+      repo: "repo",
+      ref: "heads/main",
+    });
+  });
+});
