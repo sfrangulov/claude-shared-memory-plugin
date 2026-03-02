@@ -254,16 +254,39 @@ async function main() {
     chromaCollection: process.env.CHROMA_COLLECTION || "memories",
     googleClientId: process.env.GOOGLE_CLIENT_ID,
     googleApiKey: process.env.GOOGLE_API_KEY,
+    baseUrl: process.env.MCP_BASE_URL, // e.g. https://memory.example.com — required for auth
   };
 
-  // ChromaDB client
-  const chromaClient = new ChromaClient({ host: CONFIG.chromaUrl });
-
-  // Embedding function
-  const embeddingFunction = new GoogleGeminiEmbeddingFunction({
-    apiKey: CONFIG.googleApiKey,
-    modelName: "text-embedding-004",
+  // ChromaDB client — parse URL into host + port for chromadb v3
+  const chromaUrl = new URL(CONFIG.chromaUrl);
+  const chromaClient = new ChromaClient({
+    host: chromaUrl.hostname,
+    port: parseInt(chromaUrl.port || "8000", 10),
+    ssl: chromaUrl.protocol === "https:",
   });
+
+  // Wait for ChromaDB to be ready (for Docker startup ordering)
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    try {
+      await chromaClient.heartbeat();
+      break;
+    } catch {
+      if (attempt === 10) throw new Error("ChromaDB not available after 10 attempts");
+      console.log(`Waiting for ChromaDB (attempt ${attempt}/10)...`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+
+  // Embedding function — requires GOOGLE_API_KEY
+  let embeddingFunction = null;
+  if (CONFIG.googleApiKey) {
+    embeddingFunction = new GoogleGeminiEmbeddingFunction({
+      apiKey: CONFIG.googleApiKey,
+      modelName: "gemini-embedding-001",
+    });
+  } else {
+    console.log("Embeddings disabled — set GOOGLE_API_KEY to enable semantic search");
+  }
 
   // Memory store
   const store = await createMemoryStore({
@@ -272,40 +295,42 @@ async function main() {
     collectionName: CONFIG.chromaCollection,
   });
 
-  // Token verifier
-  const verifier = createTokenVerifier({
-    googleClientId: CONFIG.googleClientId,
-  });
-
-  // Express app (with DNS rebinding protection when on localhost)
+  // Express app
   const app = createMcpExpressApp({ host: CONFIG.host });
 
-  // OAuth protected resource metadata
-  const mcpServerUrl = new URL(
-    `http://${CONFIG.host}:${CONFIG.port}/mcp`,
-  );
+  // Auth setup — optional, requires MCP_BASE_URL (HTTPS) and GOOGLE_CLIENT_ID
+  const authEnabled = CONFIG.baseUrl && CONFIG.googleClientId;
+  let authMiddleware = (_req, _res, next) => next(); // no-op for dev mode
 
-  // Metadata router for .well-known discovery
-  app.use(
-    mcpAuthMetadataRouter({
-      oauthMetadata: {
-        issuer: `http://${CONFIG.host}:${CONFIG.port}`,
-        authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-        token_endpoint: "https://oauth2.googleapis.com/token",
-        response_types_supported: ["code"],
-        grant_types_supported: ["authorization_code"],
-      },
-      resourceServerUrl: mcpServerUrl,
-      resourceName: "Chroma Memory MCP",
-    }),
-  );
+  if (authEnabled) {
+    const verifier = createTokenVerifier({
+      googleClientId: CONFIG.googleClientId,
+    });
 
-  // Bearer auth middleware
-  const authMiddleware = requireBearerAuth({
-    verifier,
-    requiredScopes: [],
-    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
-  });
+    const mcpServerUrl = new URL(`${CONFIG.baseUrl}/mcp`);
+
+    app.use(
+      mcpAuthMetadataRouter({
+        oauthMetadata: {
+          issuer: CONFIG.baseUrl,
+          authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+          token_endpoint: "https://oauth2.googleapis.com/token",
+          response_types_supported: ["code"],
+          grant_types_supported: ["authorization_code"],
+        },
+        resourceServerUrl: mcpServerUrl,
+        resourceName: "Chroma Memory MCP",
+      }),
+    );
+
+    authMiddleware = requireBearerAuth({
+      verifier,
+      requiredScopes: [],
+      resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
+    });
+  } else {
+    console.log("Auth disabled — set MCP_BASE_URL and GOOGLE_CLIENT_ID to enable");
+  }
 
   // Transport sessions
   const transports = {};
