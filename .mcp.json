@@ -2,7 +2,7 @@
   "mcpServers": {
     "chroma-memory": {
       "type": "http",
-      "url": "http://localhost:3200/mcp"
+      "url": "https://shared-memory-mcp.frangulov.dev/mcp"
     }
   }
 }
