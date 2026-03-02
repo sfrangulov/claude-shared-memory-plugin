@@ -312,3 +312,74 @@ describe("atomicCommitWithRetry", () => {
     expect(client.getHeadSHA).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("concurrent scenarios", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("buildFiles is called with fresh data on each retry", async () => {
+    const error422 = new Error("Reference update failed");
+    error422.status = 422;
+
+    let updateRefCalls = 0;
+    const client = makeMockClient({
+      updateRef: vi.fn().mockImplementation(async () => {
+        updateRefCalls++;
+        if (updateRefCalls <= 2) throw error422;
+      }),
+    });
+
+    const versions = [];
+    const buildFiles = vi.fn().mockImplementation(async () => {
+      const version = buildFiles.mock.calls.length;
+      versions.push(version);
+      return [{ path: "p/root.md", content: `v${version}` }];
+    });
+
+    const promise = atomicCommitWithRetry(client, {
+      buildFiles,
+      message: "concurrent test",
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3000);
+    const result = await promise;
+
+    expect(result.success).toBe(true);
+    expect(buildFiles).toHaveBeenCalledTimes(3);
+    expect(versions).toEqual([1, 2, 3]);
+  });
+
+  it("returns failure after all retries exhausted with buildFiles", async () => {
+    const error422 = new Error("Reference update failed");
+    error422.status = 422;
+
+    const client = makeMockClient({
+      updateRef: vi.fn().mockRejectedValue(error422),
+    });
+
+    const buildFiles = vi.fn().mockResolvedValue([
+      { path: "p/entry.md", content: "content" },
+    ]);
+
+    const promise = atomicCommitWithRetry(client, {
+      buildFiles,
+      message: "always fail",
+      maxRetries: 3,
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(9000);
+
+    const result = await promise;
+
+    expect(result).toEqual({ success: false, error: "conflict" });
+    expect(buildFiles).toHaveBeenCalledTimes(4);
+  });
+});
