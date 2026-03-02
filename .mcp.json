@@ -1,13 +1,8 @@
 {
   "mcpServers": {
-    "shared-memory": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@sfrangulov/shared-memory-mcp"],
-      "env": {
-        "GITHUB_TOKEN": "{{GITHUB_TOKEN}}",
-        "GITHUB_REPO": "{{GITHUB_REPO}}"
-      }
+    "chroma-memory": {
+      "type": "http",
+      "url": "http://localhost:3200/mcp"
     }
   }
 }

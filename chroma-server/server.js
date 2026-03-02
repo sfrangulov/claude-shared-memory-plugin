@@ -282,6 +282,7 @@ async function main() {
   if (CONFIG.googleApiKey) {
     embeddingFunction = new GoogleGeminiEmbeddingFunction({
       apiKey: CONFIG.googleApiKey,
+      apiKeyEnvVar: "GOOGLE_API_KEY",
       modelName: "gemini-embedding-001",
     });
   } else {
