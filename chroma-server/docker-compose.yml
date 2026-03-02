@@ -1,0 +1,27 @@
+services:
+  chromadb:
+    image: chromadb/chroma:1.5.2
+    volumes:
+      - chroma-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mcp-server:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - CHROMA_URL=http://chromadb:8000
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - EMBEDDING_PROVIDER=google
+      - MCP_PORT=3000
+    depends_on:
+      chromadb:
+        condition: service_healthy
+
+volumes:
+  chroma-data:
