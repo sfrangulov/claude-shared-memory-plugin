@@ -57,9 +57,11 @@ Each folder has a `root.md` — a lightweight table of contents with titles, des
 ## Requirements
 
 - Node.js ≥ 20
-- GitHub Personal Access Token with `repo` scope
+- GitHub Personal Access Token with `repo` scope (or fine-grained token with `Contents: Read and write`)
 - A GitHub repository (private recommended)
 - Claude desktop app with Cowork mode
+
+**Note:** The plugin auto-detects your repository's default branch (main, master, etc.).
 
 ## Installation
 

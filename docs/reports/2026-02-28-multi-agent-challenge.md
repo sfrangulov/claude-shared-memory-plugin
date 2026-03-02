@@ -264,3 +264,25 @@ All 4 agents agree on:
 5. **Consider semantic search** — even lightweight embeddings dramatically improve core value
 6. **Don't invest in commercialization** — maximize intangible returns: reputation, community, MCP expertise
 7. **Consider platform expansion** — support Cursor, Continue, and other MCP clients beyond Claude Desktop
+
+---
+
+## Resolved Issues (2026-03-02)
+
+Issues addressed from the MVP Hardening pass:
+
+| # | Issue | Resolution | Task |
+|---|-------|------------|------|
+| 1 | Retry data loss (stale root.md) | buildFiles callback re-reads on each attempt | Task 1 |
+| 2 | Hardcoded heads/main | Auto-detect via repos.get, configurable branch param | Task 2 |
+| 3 | Path traversal on project param | validators.js with checks on all tools | Task 3 |
+| 4 | No storage abstraction | memory-store.js wraps all GitHub calls | Task 4 |
+| 5 | Monolithic server (1361 lines) | Extracted helpers.js, reduced server to ~1070 lines | Task 5 |
+| 6 | Duplicated related-entries logic | Consolidated in store.getRelatedEntries() | Task 4 |
+| 7 | No concurrency tests | Added buildFiles retry tests | Task 6 |
+
+**Still deferred:**
+- Semantic search
+- Access control
+- Author search scaling
+- root.md format migration (JSON)
