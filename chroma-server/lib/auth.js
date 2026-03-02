@@ -28,8 +28,14 @@ export function createTokenVerifier({ googleClientId, _oauth2Client }) {
       });
 
       const payload = ticket.getPayload();
+      if (!payload) {
+        throw new Error("Token payload is missing");
+      }
       if (!payload.email_verified) {
         throw new Error("Email not verified");
+      }
+      if (!payload.email) {
+        throw new Error("Email claim is missing from token");
       }
 
       return {

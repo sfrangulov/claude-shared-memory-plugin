@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createTokenVerifier, extractUserEmail } from "../lib/auth.js";
 
 describe("createTokenVerifier", () => {
@@ -58,6 +58,39 @@ describe("createTokenVerifier", () => {
     });
 
     await expect(verifier.verifyAccessToken("token")).rejects.toThrow("Email not verified");
+  });
+
+  it("throws when payload is missing", async () => {
+    const mockOAuth2Client = {
+      verifyIdToken: vi.fn().mockResolvedValue({
+        getPayload: () => undefined,
+      }),
+    };
+
+    const verifier = createTokenVerifier({
+      googleClientId: "test-client-id",
+      _oauth2Client: mockOAuth2Client,
+    });
+
+    await expect(verifier.verifyAccessToken("token")).rejects.toThrow("Token payload is missing");
+  });
+
+  it("throws when email claim is missing", async () => {
+    const mockOAuth2Client = {
+      verifyIdToken: vi.fn().mockResolvedValue({
+        getPayload: () => ({
+          sub: "123",
+          email_verified: true,
+        }),
+      }),
+    };
+
+    const verifier = createTokenVerifier({
+      googleClientId: "test-client-id",
+      _oauth2Client: mockOAuth2Client,
+    });
+
+    await expect(verifier.verifyAccessToken("token")).rejects.toThrow("Email claim is missing from token");
   });
 });
 
