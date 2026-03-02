@@ -297,6 +297,7 @@ async function main() {
 
   // Express app
   const app = createMcpExpressApp({ host: CONFIG.host });
+  app.set("trust proxy", 1); // Behind nginx ingress
 
   // Auth setup — optional, requires MCP_BASE_URL, GOOGLE_CLIENT_ID, and GOOGLE_CLIENT_SECRET
   const authEnabled = CONFIG.baseUrl && CONFIG.googleClientId && CONFIG.googleClientSecret;
