@@ -68,9 +68,10 @@ export function createMcpServerFactory(store) {
         slug: z.string().describe("URL-safe short name"),
         title: z.string().describe("Human-readable title"),
         content: z.string().describe("Markdown content"),
-        tags: z.array(z.string()).describe("Categorisation tags"),
+        tags: z.array(z.string()).default([]).describe("Categorisation tags"),
         type: z
           .enum(["note", "decision", "snippet", "doc", "log"])
+          .default("note")
           .describe("Entry type"),
       },
     },
@@ -169,6 +170,10 @@ export function createMcpServerFactory(store) {
     "search",
     {
       description: "Semantic search across memory entries",
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+      },
       inputSchema: {
         query: z.string().describe("Natural-language search query"),
         project: z.string().optional().describe("Filter by project"),
