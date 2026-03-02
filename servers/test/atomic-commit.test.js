@@ -243,6 +243,53 @@ describe("atomicCommitWithRetry", () => {
     expect(client.updateRef).toHaveBeenCalledTimes(4);
   });
 
+  it("calls buildFiles on each retry to get fresh content", async () => {
+    const error422 = new Error("Reference update failed");
+    error422.status = 422;
+
+    let callCount = 0;
+    const client = makeMockClient({
+      updateRef: vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) throw error422;
+      }),
+    });
+
+    let buildFilesCallCount = 0;
+    const buildFiles = vi.fn().mockImplementation(async () => {
+      buildFilesCallCount++;
+      return [
+        { path: "project/entry.md", content: `version-${buildFilesCallCount}` },
+        { path: "project/root.md", content: `root-version-${buildFilesCallCount}` },
+      ];
+    });
+
+    const promise = atomicCommitWithRetry(client, {
+      buildFiles,
+      message: "retry with fresh files",
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = await promise;
+
+    expect(result).toEqual({ commitSHA: "commitsha555", success: true });
+    expect(buildFiles).toHaveBeenCalledTimes(2);
+    expect(client.createBlob).toHaveBeenCalledWith("version-2");
+  });
+
+  it("still accepts static files array for backward compatibility", async () => {
+    const client = makeMockClient();
+    const files = [{ path: "project/entry.md", content: "static content" }];
+
+    const result = await atomicCommitWithRetry(client, {
+      files,
+      message: "static files",
+    });
+
+    expect(result).toEqual({ commitSHA: "commitsha555", success: true });
+    expect(client.createBlob).toHaveBeenCalledWith("static content");
+  });
+
   it("rethrows non-ConflictError immediately", async () => {
     const genericError = new Error("Network failure");
 

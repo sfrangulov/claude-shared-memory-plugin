@@ -647,10 +647,17 @@ server.registerTool(
 
       // 6. Atomic commit
       const commitResult = await atomicCommitWithRetry(client, {
-        files: [
-          { path: `${project}/${fileName}`, content: entryContent },
-          { path: `${project}/root.md`, content: updated_markdown },
-        ],
+        buildFiles: async () => {
+          const freshRoot = await client.getFileContent(`${project}/root.md`);
+          const { updated_markdown: freshMarkdown } = addEntryToRoot(
+            freshRoot.content,
+            { file: fileName, name: title, description, tags }
+          );
+          return [
+            { path: `${project}/${fileName}`, content: entryContent },
+            { path: `${project}/root.md`, content: freshMarkdown },
+          ];
+        },
         message: `[shared-memory] create-entry: ${title}`,
       });
 
@@ -778,32 +785,31 @@ server.registerTool(
         related: relatedLinks,
       });
 
-      // 4. Update root.md if tags/description changed
-      const filesToCommit = [
-        { path: `${project}/${file}`, content: updatedContent },
-      ];
-
-      if (new_tags || new_description) {
-        const rootFile = await client.getFileContent(`${project}/root.md`);
-        if (rootFile) {
-          const changes = {};
-          if (new_tags) changes.tags = new_tags;
-          if (new_description) changes.description = new_description;
-          const updatedRoot = updateEntryInRoot(
-            rootFile.content,
-            file,
-            changes
-          );
-          filesToCommit.push({
-            path: `${project}/root.md`,
-            content: updatedRoot,
-          });
-        }
-      }
-
-      // 5. Atomic commit
+      // 4. Atomic commit (re-reads root.md on each retry to prevent data loss)
       const commitResult = await atomicCommitWithRetry(client, {
-        files: filesToCommit,
+        buildFiles: async () => {
+          const currentFiles = [
+            { path: `${project}/${file}`, content: updatedContent },
+          ];
+          if (new_tags || new_description) {
+            const freshRoot = await client.getFileContent(`${project}/root.md`);
+            if (freshRoot) {
+              const changes = {};
+              if (new_tags) changes.tags = new_tags;
+              if (new_description) changes.description = new_description;
+              const updatedRoot = updateEntryInRoot(
+                freshRoot.content,
+                file,
+                changes
+              );
+              currentFiles.push({
+                path: `${project}/root.md`,
+                content: updatedRoot,
+              });
+            }
+          }
+          return currentFiles;
+        },
         message: `[shared-memory] update-entry: ${currentMeta.title}`,
       });
 

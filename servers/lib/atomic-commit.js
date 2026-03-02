@@ -89,23 +89,25 @@ export async function atomicCommit(client, { files, message, parentSHA }) {
  *
  * @param {object} client - GitHub client (from createGitHubClient)
  * @param {object} params
- * @param {Array<{path: string, content: string}>} params.files - files to commit
+ * @param {Function} [params.buildFiles] - async callback returning files array, called on each attempt (preferred)
+ * @param {Array<{path: string, content: string}>} [params.files] - static files to commit (backward compat)
  * @param {string} params.message - commit message
  * @param {number} [params.maxRetries=3] - maximum number of retries
  * @returns {Promise<{commitSHA: string, success: true} | {success: false, error: 'conflict'}>}
  */
 export async function atomicCommitWithRetry(
   client,
-  { files, message, maxRetries = 3 }
+  { buildFiles, files, message, maxRetries = 3 }
 ) {
+  const resolveFiles = buildFiles || (async () => files);
   const backoffs = [1000, 3000, 9000];
 
   // First attempt
   try {
-    return await atomicCommit(client, { files, message });
+    const currentFiles = await resolveFiles();
+    return await atomicCommit(client, { files: currentFiles, message });
   } catch (err) {
     if (!(err instanceof ConflictError)) throw err;
-    // Fall through to retry loop
   }
 
   // Retry loop
@@ -114,11 +116,10 @@ export async function atomicCommitWithRetry(
     await sleep(delay);
 
     try {
-      // No parentSHA — atomicCommit will fetch fresh HEAD
-      return await atomicCommit(client, { files, message });
+      const currentFiles = await resolveFiles();
+      return await atomicCommit(client, { files: currentFiles, message });
     } catch (err) {
       if (!(err instanceof ConflictError)) throw err;
-      // Continue to next retry
     }
   }
 
