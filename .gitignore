@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 .vite/
 
 .DS_Store
+
+# MCP client config (contains local URLs)
+.mcp.json
