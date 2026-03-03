@@ -327,6 +327,7 @@ async function main() {
     authMiddleware = requireBearerAuth({
       verifier: provider,
       requiredScopes: [],
+      resourceMetadataUrl: new URL("/.well-known/oauth-protected-resource", CONFIG.baseUrl),
     });
   } else {
     console.log(

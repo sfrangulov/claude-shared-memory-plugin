@@ -70,7 +70,7 @@ secrets:
 ingress:
   enabled: true
   className: public
-  host: shared-memory-mcp.frangulov.dev
+  host: chroma-memory.frangulov.dev
   tls:
     enabled: true
     clusterIssuer: lets-encrypt

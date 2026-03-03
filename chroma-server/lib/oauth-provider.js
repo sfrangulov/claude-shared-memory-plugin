@@ -14,7 +14,7 @@ import { randomUUID, createHash } from "node:crypto";
  * @param {object} opts
  * @param {string} opts.googleClientId
  * @param {string} opts.googleClientSecret
- * @param {string} opts.baseUrl - e.g. https://shared-memory-mcp.frangulov.dev
+ * @param {string} opts.baseUrl - e.g. https://chroma-memory.frangulov.dev
  */
 export function createOAuthProvider({ googleClientId, googleClientSecret, baseUrl }) {
   // In-memory stores (sufficient for single-instance deployment)

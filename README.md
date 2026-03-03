@@ -1,166 +1,219 @@
-# Claude Shared Memory
+# Chroma Memory MCP
 
-A Cowork plugin that turns a GitHub repository into a shared team knowledge base. Every team member's Claude session gains access to shared context — terminology, decisions, processes, contacts — so Claude understands your team like a colleague, not a new intern in each conversation.
+An MCP server that gives Claude (and any MCP client) a shared team knowledge base with semantic search. Backed by ChromaDB and Google Gemini embeddings — works across languages (RU + EN).
 
 ## How It Works
 
-The plugin connects Claude to a GitHub repo where your team stores knowledge as Markdown files. When someone asks Claude about a past decision, a technical term, or a process — Claude searches shared memory and answers with full context. When someone makes a new decision worth sharing — they tell Claude to "remember this for the team," and it's saved for everyone.
-
-No git knowledge required from team members. Claude handles all reading and writing through the GitHub API.
-
-## Architecture
-
-Three layers, each with a clear responsibility:
-
-**MCP Server** — the data layer. A Node.js process that talks to GitHub via Octokit. Handles all API calls, atomic commits, SHA conflict resolution, caching, and rate limiting. Exposes tools like `read_entry`, `write_entry`, `search_tags` to Claude via the MCP protocol.
-
-**Skill** — the brain. A SKILL.md file that teaches Claude *when* and *how* to use the MCP tools. Contains matching algorithms, UX patterns, deduplication logic, and rules for separating shared memory from local memory. All LLM reasoning lives here.
-
-**Commands** — quick access. Slash commands (`/memory`, `/remember`, `/project`) that give users direct shortcuts to common operations.
-
-## Repository Structure
-
-Knowledge is organized by project. Team-wide knowledge lives in `_shared/`.
+The server stores team knowledge as entries in ChromaDB. Each entry has a project, slug, title, content (Markdown), tags, type, and author. When someone asks a question, Claude runs a semantic search and answers with full context. When someone makes a decision worth sharing, they tell Claude to save it — and it's available to every team member.
 
 ```
-your-memory-repo/
-├── _meta.md                  # Config: templates, archived projects
-├── _shared/
-│   ├── root.md               # Index: team glossary, processes, contacts
-│   ├── deploy-process.md
-│   └── glossary.md
-├── mobile-app/
-│   ├── root.md               # Index: all entries for this project
-│   ├── auth-architecture.md
-│   └── rive-vs-lottie.md
-└── backend-api/
-    ├── root.md
-    └── ...
+Claude ──MCP──▶ chroma-memory-mcp ──▶ ChromaDB
+                      │
+                      ▼
+              Gemini Embeddings
+              (multilingual RU+EN)
 ```
 
-Each folder has a `root.md` — a lightweight table of contents with titles, descriptions, and tags. The plugin reads only this index, then loads full entries selectively by relevance. This keeps context usage minimal even with hundreds of entries.
+## Quick Start
 
-## Key Features
+### Docker Compose (recommended)
 
-**Smart search** — Claude extracts keywords from your question, matches them against tags (exact) and descriptions (substring) in `root.md`. Person names go through author search. Vague queries fall back to GitHub full-text search.
+```bash
+cd chroma-server
 
-**Deduplication** — before creating a new entry, the plugin checks for existing entries with overlapping tags or similar descriptions. If a match is found, you can update the existing entry instead.
+# Set environment variables
+export GOOGLE_API_KEY=your-gemini-api-key
 
-**Atomic commits** — every write operation (new entry, update, project creation) uses the Git Trees API to commit all changes in a single atomic operation. No partial writes, no corruption.
+# Start ChromaDB + MCP server
+docker compose up -d
+```
 
-**Concurrent edit detection** — if someone else updated an entry while you were reading it, the plugin detects the SHA mismatch and gives you options: overwrite, cancel, or let Claude merge the changes.
+The server is now available at `http://localhost:3000/mcp`.
 
-**Auto-related links** — when you save an entry, the plugin finds other entries with common tags and automatically links them in a Related section.
+### Connect Claude Code
 
-**Bilingual UX** — all user-facing messages work in both Russian and English.
+Add to `.mcp.json` in your project root:
 
-## Requirements
+```json
+{
+  "mcpServers": {
+    "chroma-memory": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
 
-- Node.js ≥ 20
-- GitHub Personal Access Token with `repo` scope (or fine-grained token with `Contents: Read and write`)
-- A GitHub repository (private recommended)
-- Claude desktop app with Cowork mode
+### Connect Claude Desktop
 
-**Note:** The plugin auto-detects your repository's default branch (main, master, etc.).
+Add to `claude_desktop_config.json`:
 
-## Installation
-
-1. Create a GitHub repository for your team's shared memory (private, empty).
-2. Generate a Personal Access Token with `repo` scope.
-3. Install the Shared Memory plugin in Cowork.
-4. In plugin settings, enter your token and repository (`owner/repo-name`).
-5. On first launch, Claude will offer to initialize the repo structure.
-6. Create your first project: `/project mobile-app`
-7. Start saving knowledge: "Remember for the team that we chose JWT for auth."
-
-For team setup: grant repo access to each member's GitHub account, then share the plugin installation link.
-
-## Usage
-
-### Searching
-
-Just ask Claude naturally:
-
-- "What did we decide about authentication?"
-- "Who worked on the animation system?"
-- "What's our deploy process?"
-
-Or use the command: `/memory auth architecture`
-
-### Saving
-
-Tell Claude what to remember:
-
-- "Remember for the team: we chose Rive over Lottie because of state machines and WASM runtime."
-- "Save this decision to shared memory."
-
-Or use the command: `/remember We chose PostgreSQL over MongoDB for ACID compliance`
-
-### Switching projects
-
-- `/project mobile-app` — switch to a project
-- `/project` — show project list
-
-## Tech Stack
-
-| Dependency | Version | Purpose |
-|---|---|---|
-| @modelcontextprotocol/sdk | ^1.27.0 | MCP server framework |
-| @octokit/rest | ^22.0.0 | GitHub API client |
-| @octokit/plugin-retry | ^8.0.0 | Auto-retry for 5xx/timeouts |
-| @octokit/plugin-throttling | ^11.0.0 | Rate limit handling (429) |
-| p-limit | ^7.0.0 | Concurrency control |
-| zod | ^3.24.0 | Input schema validation |
-| transliteration | ^2.6.0 | Slug generation from any language |
+```json
+{
+  "mcpServers": {
+    "chroma-memory": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
 
 ## MCP Tools
 
-| Tool | Description |
-|---|---|
-| `connect_repo` | Validate token, initialize repo if empty |
-| `read_root` | Read project's root.md index |
-| `read_entry` | Load full entry content by slug |
-| `write_entry` | Create new entry (atomic commit) |
-| `update_entry` | Update existing entry (with SHA conflict detection) |
-| `delete_entry` | Remove entry from root.md and delete file |
-| `search_tags` | Search across root.md tables by tags/description |
-| `search_author` | Find entries by author name |
-| `search_deep` | Full-text search via GitHub Search API |
-| `check_duplicate` | Check for similar entries before writing |
-| `switch_project` | Change active project context |
-| `list_projects` | List all projects in the repo |
+| Tool | Description | Key params |
+|------|-------------|------------|
+| `write_entry` | Create a new memory entry | `project`, `slug`, `title`, `content`, `tags?`, `type?` |
+| `read_entry` | Read entry by project + slug | `project`, `slug` |
+| `update_entry` | Update an existing entry | `project`, `slug`, + fields to change |
+| `delete_entry` | Delete an entry | `project`, `slug` |
+| `search` | Semantic search across entries | `query`, `project?`, `author?`, `n_results?` |
+| `list_entries` | List entries with filters | `project?`, `author?`, `type?` |
+| `list_projects` | List all project names | — |
 
-## Error Handling
+### Entry types
 
-The plugin handles all errors gracefully with user-friendly messages and recovery paths:
+- `note` (default) — general knowledge
+- `decision` — architectural or process decisions
+- `snippet` — reusable code fragments
+- `doc` — documentation and reference material
+- `log` — event logs and session records
 
-- **auth_failed** — guides user to check token in settings
-- **network_error** — auto-retries 3 times, then suggests checking connection
-- **rate_limit_rest** — waits and retries (5,000 requests/hour limit)
-- **rate_limit_search** — suggests tag-based search as alternative (10 requests/minute limit)
-- **sha_conflict** — auto-retries atomic commit with fresh SHA
-- **concurrent_edit** — shows diff, offers overwrite/cancel/merge
-- **parse_error** — flags corruption, directs admin to fix in GitHub
+### Entry ID format
 
-## Customer Journey Diagrams
+`{project}:{slug}` — for example `mobile-app:auth-decision`.
 
-See the `diagrams/` folder for detailed Mermaid flowcharts:
+## Usage Examples
 
-1. **Admin First-Time Setup** (`01-admin-setup-journey.mermaid`) — from repo creation to team onboarding
-2. **Team Member Daily Usage** (`02-team-member-daily-journey.mermaid`) — search, save, and update workflows
-3. **Search Decision Tree** (`03-search-decision-tree.mermaid`) — how the plugin routes different query types
-4. **Write Entry Flow** (`04-write-entry-flow.mermaid`) — full write pipeline with deduplication and conflict handling
-5. **Error Handling & Recovery** (`05-error-handling-recovery.mermaid`) — all error types with recovery paths
+### Save a decision
 
-## Documentation
+> "Remember for the team: we chose PostgreSQL over MongoDB for ACID compliance."
 
-- [Functional Requirements](shared-memory-plugin-requirements.md) — what the plugin does (F1–F9), constraints, open questions
-- [Implementation Guide](shared-memory-implementation-guide.md) — how to build it: architecture, API contracts, code patterns, UX flows
+Claude calls `write_entry` with project, slug, title, content, and tags.
 
-## Development Status
+### Search memory
 
-Version 1.3 — documentation complete, passed 3 review iterations (tech architect + product PM + UX designer). Ready for development.
+> "What did we decide about authentication?"
+
+Claude calls `search` with the query, reviews results, and answers with context.
+
+### Browse a project
+
+> "What's in our project memory?"
+
+Claude calls `list_projects`, then `list_entries` for the relevant project.
+
+## Configuration
+
+Environment variables for the MCP server:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CHROMA_URL` | No | `http://localhost:8000` | ChromaDB connection URL |
+| `CHROMA_COLLECTION` | No | `memories` | ChromaDB collection name |
+| `GOOGLE_API_KEY` | Yes | — | Gemini API key for embeddings |
+| `MCP_PORT` | No | `3000` | Server port |
+| `MCP_HOST` | No | `0.0.0.0` | Server bind address |
+| `MCP_BASE_URL` | No* | — | Public HTTPS URL (required for OAuth) |
+| `GOOGLE_CLIENT_ID` | No* | — | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | No* | — | Google OAuth client secret |
+
+*OAuth is optional. Without it, the server runs in dev mode (no auth).
+
+## Authentication
+
+For production deployments, enable Google OAuth2:
+
+1. Create OAuth credentials in Google Cloud Console
+2. Set `MCP_BASE_URL`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`
+3. The server adds OAuth endpoints automatically (`/.well-known/oauth-authorization-server`, etc.)
+4. Each user authenticates with their Google account — their email becomes the `author` field
+
+Without OAuth (dev mode), the server accepts all requests and sets author to `anonymous`.
+
+## Deployment
+
+### Docker Compose
+
+```yaml
+services:
+  chromadb:
+    image: chromadb/chroma:1.5.2
+    volumes:
+      - chroma-data:/data
+
+  mcp-server:
+    build: ./chroma-server
+    ports:
+      - "3000:3000"
+    environment:
+      - CHROMA_URL=http://chromadb:8000
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      - chromadb
+    restart: on-failure
+
+volumes:
+  chroma-data:
+```
+
+### Kubernetes (Helm)
+
+A Helm chart is included in `chroma-server/helm/chroma-memory-mcp/`.
+
+```bash
+helm install chroma-memory ./chroma-server/helm/chroma-memory-mcp \
+  --set googleApiKey=YOUR_KEY \
+  --set googleClientId=YOUR_CLIENT_ID \
+  --set googleClientSecret=YOUR_SECRET
+```
+
+## Tech Stack
+
+| Dependency | Purpose |
+|------------|---------|
+| `@modelcontextprotocol/sdk` | MCP server framework (Streamable HTTP transport) |
+| `chromadb` v3 | Vector database client |
+| `@chroma-core/google-gemini` | Gemini embedding function |
+| `express` v5 | HTTP server |
+| `google-auth-library` | OAuth2 authentication |
+| `zod` | Input schema validation |
+
+## Project Structure
+
+```
+chroma-server/
+├── server.js                 # MCP server + Express app
+├── lib/
+│   ├── memory-store.js       # ChromaDB wrapper (CRUD + search)
+│   ├── auth.js               # Email extraction from auth info
+│   └── oauth-provider.js     # Google OAuth2 provider
+├── test/                     # Unit + integration tests (Vitest)
+├── docker-compose.yml        # Local development
+├── docker-compose.test.yml   # Integration test environment
+├── Dockerfile                # Production image (node:20-slim)
+└── helm/                     # Kubernetes Helm chart
+skills/
+└── chroma-memory/
+    └── SKILL.md              # Claude skill for using the MCP tools
+```
+
+## Development
+
+```bash
+cd chroma-server
+npm install
+
+# Run unit tests
+npm test
+
+# Run integration tests (requires Docker)
+docker compose -f docker-compose.test.yml up -d
+npm run test:integration
+docker compose -f docker-compose.test.yml down
+```
 
 ## License
 
-Internal use only.
+MIT
