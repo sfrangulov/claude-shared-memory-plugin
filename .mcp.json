@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "chroma-memory": {
-      "type": "http",
-      "url": "https://chroma-memory.frangulov.dev/mcp"
-    }
-  }
-}
